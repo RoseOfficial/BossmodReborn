@@ -99,6 +99,23 @@ class InversiveChlamys(BossModule module) : BossComponent(module)
         }
     }
 
+    public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints)
+    {
+        if (_tetherForbidden.None())
+            return;
+
+        if (!_tetherForbidden[slot])
+        {
+            // We should be intercepting tethers - position to intercept from forbidden players
+            PositionForTetherIntercept(actor, hints);
+        }
+        else
+        {
+            // We should be passing tethers - position to pass to eligible players and avoid AOE
+            PositionForTetherPass(actor, hints);
+        }
+    }
+
     public override void DrawArenaForeground(int pcSlot, Actor pc)
     {
         if (_tetherTargets.None())
@@ -115,6 +132,146 @@ class InversiveChlamys(BossModule module) : BossComponent(module)
             {
                 Arena.AddLine(player.Position, Module.PrimaryActor.Position, failing ? Colors.Danger : Colors.Safe);
                 Arena.AddCircle(player.Position, _aoeRange, Colors.Danger);
+            }
+        }
+    }
+
+    private void PositionForTetherIntercept(Actor actor, AIHints hints)
+    {
+        // Find forbidden players who need to pass their tethers
+        var forbiddenPlayers = Raid.WithSlot(false, true, true).IncludedInMask(_tetherForbidden);
+        
+        if (_tetherTargets.None())
+        {
+            // Tethers not assigned yet - position to be ready to intercept
+            var centerPos = Arena.Center;
+            var slot = Raid.FindSlot(actor.InstanceID);
+            var angle = slot * 45f; // 8 positions around the clock
+            var radians = angle * MathF.PI / 180f;
+            var targetPos = centerPos + new WDir(MathF.Sin(radians), MathF.Cos(radians)) * 8f;
+            
+            // Maintain distance from other interceptors
+            foreach (var (_, player) in Raid.WithSlot(false, true, true))
+            {
+                if (player != actor && !_tetherForbidden[Raid.FindSlot(player.InstanceID)])
+                {
+                    hints.AddForbiddenZone(ShapeDistance.Circle(player.Position, 4f));
+                }
+            }
+            
+            // Only apply forced movement if we're not already close to target position
+            var distanceToTarget = (targetPos - actor.Position).Length();
+            if (distanceToTarget > 1.5f)
+            {
+                hints.ForcedMovement = (targetPos - actor.Position).ToVec3(actor.PosRot.Y);
+            }
+        }
+        else if (_tetherTargets.Any() && !_tetherTargets[Raid.FindSlot(actor.InstanceID)])
+        {
+            // Tethers are assigned but we don't have one - move to intercept from forbidden players
+            var closestForbiddenWithTether = forbiddenPlayers
+                .Where(p => _tetherTargets[Raid.FindSlot(p.Item2.InstanceID)])
+                .OrderBy(p => (p.Item2.Position - actor.Position).LengthSq())
+                .FirstOrDefault();
+                
+            if (closestForbiddenWithTether.Item2 != null)
+            {
+                // Position between forbidden player and boss to intercept tether
+                var forbiddenPlayer = closestForbiddenWithTether.Item2;
+                var bossPos = Module.PrimaryActor.Position;
+                var directionToBoss = (bossPos - forbiddenPlayer.Position).Normalized();
+                var targetPos = forbiddenPlayer.Position + directionToBoss * 2f;
+                
+                // Only apply forced movement if we're not already close to target position
+                var distanceToTarget = (targetPos - actor.Position).Length();
+                if (distanceToTarget > 1.5f)
+                {
+                    hints.ForcedMovement = (targetPos - actor.Position).ToVec3(actor.PosRot.Y);
+                }
+            }
+        }
+        else if (_tetherTargets[Raid.FindSlot(actor.InstanceID)])
+        {
+            // We have a tether - position away from others to avoid AOE overlap
+            foreach (var (_, player) in Raid.WithSlot(false, true, true))
+            {
+                if (player != actor)
+                {
+                    hints.AddForbiddenZone(ShapeDistance.Circle(player.Position, _aoeRange + 1f));
+                }
+            }
+        }
+    }
+
+    private void PositionForTetherPass(Actor actor, AIHints hints)
+    {
+        // Find eligible players who can intercept tethers
+        var eligiblePlayers = Raid.WithSlot(false, true, true).WhereActor(p => !_tetherForbidden[Raid.FindSlot(p.InstanceID)]);
+        
+        if (_tetherTargets.None())
+        {
+            // Tethers not assigned yet - position with other forbidden players
+            var otherForbiddenPlayers = Raid.WithSlot(false, true, true)
+                .IncludedInMask(_tetherForbidden)
+                .Where(p => p.Item2 != actor);
+                
+            if (otherForbiddenPlayers.Any())
+            {
+                // Stack with other forbidden players
+                var stackPos = new WPos(
+                    otherForbiddenPlayers.Average(p => p.Item2.Position.X),
+                    otherForbiddenPlayers.Average(p => p.Item2.Position.Z)
+                );
+                
+                // Only apply forced movement if we're not already close to stack position
+                var distanceToStack = (stackPos - actor.Position).Length();
+                if (distanceToStack > 1.5f)
+                {
+                    hints.ForcedMovement = (stackPos - actor.Position).ToVec3(actor.PosRot.Y);
+                }
+            }
+            else
+            {
+                // Position centrally for easy access by eligible players
+                var distanceToCenter = (Arena.Center - actor.Position).Length();
+                if (distanceToCenter > 2f)
+                {
+                    hints.ForcedMovement = (Arena.Center - actor.Position).ToVec3(actor.PosRot.Y);
+                }
+            }
+        }
+        else if (_tetherTargets[Raid.FindSlot(actor.InstanceID)])
+        {
+            // We have a tether and need to pass it - move towards eligible players
+            var closestEligible = eligiblePlayers
+                .Where(p => !_tetherTargets[Raid.FindSlot(p.Item2.InstanceID)])
+                .OrderBy(p => (p.Item2.Position - actor.Position).LengthSq())
+                .FirstOrDefault();
+                
+            if (closestEligible.Item2 != null)
+            {
+                // Move towards the eligible player to pass the tether
+                var eligiblePlayer = closestEligible.Item2;
+                var directionToEligible = (eligiblePlayer.Position - actor.Position).Normalized();
+                var targetPos = eligiblePlayer.Position - directionToEligible * 2f;
+                
+                // Only apply forced movement if we're not already close to target position
+                var distanceToTarget = (targetPos - actor.Position).Length();
+                if (distanceToTarget > 1.5f)
+                {
+                    hints.ForcedMovement = (targetPos - actor.Position).ToVec3(actor.PosRot.Y);
+                }
+            }
+        }
+        else
+        {
+            // We don't have a tether - stay away from AOE zones
+            foreach (var (_, player) in Raid.WithSlot(false, true, true))
+            {
+                if (_tetherTargets[Raid.FindSlot(player.InstanceID)])
+                {
+                    hints.AddForbiddenZone(ShapeDistance.Circle(player.Position, _aoeRange + 1f));
+                }
             }
         }
     }

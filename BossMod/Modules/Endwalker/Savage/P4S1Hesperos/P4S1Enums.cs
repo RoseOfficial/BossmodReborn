@@ -61,6 +61,15 @@ public enum AID : uint
     Decollation = 27145, // Boss->Boss
     VengefulBelone = 28194, // Boss->Boss
     InversiveChlamysAOE2 = 28437, // Helper->target, no cast, damage to tethered targets (during belone coils)
+
+    // P4S1 Enemy Casts (commented out for now)
+    // AutoAttack = ???, // Boss->target, no cast
+    // Teleport = ???, // Boss->location, no cast
+    // EnrageSequence = ???, // Boss->Boss, happens at 7:12
+    // StatusApplications = ???, // Various status effect applications
+    // TetherCreation = ???, // Creates various tether types
+    // PositionMarkers = ???, // Ground markers for mechanics
+    // PhaseTransition = ???, // Transition to P4S2
 }
 
 public enum SID : uint

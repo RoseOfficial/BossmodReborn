@@ -34,6 +34,8 @@ class P4S1States : StateMachineBuilder
     private void Decollation(uint id, float delay)
     {
         Cast(id, (uint)AID.Decollation, delay, 5, "AOE")
+            .ActivateOnEnter<Decollation>()
+            .DeactivateOnExit<Decollation>()
             .SetHint(StateMachine.StateHint.Raidwide);
     }
 
@@ -58,14 +60,22 @@ class P4S1States : StateMachineBuilder
         // note: just before (~0.1s) every bloodrake cast start, its targets are tethered to boss
         // targets of first bloodrake will be killed if they are targets of chlamys tethers later
         Cast(id, (uint)AID.Bloodrake, delay, 4, "Bloodrake 1")
-            .ActivateOnEnter<InversiveChlamys>();
+            .ActivateOnEnter<InversiveChlamys>()
+            .ActivateOnEnter<Bloodrake>()
+            .DeactivateOnExit<Bloodrake>()
+            .SetHint(StateMachine.StateHint.Raidwide);
 
         // this cast is pure flavour and does nothing (replaces status 2799 'Aethersucker' with status 2800 'Casting Chlamys' on boss)
-        Cast(id + 0x1000, (uint)AID.AethericChlamys, 3.2f, 4);
+        Cast(id + 0x1000, (uint)AID.AethericChlamys, 3.2f, 4)
+            .ActivateOnEnter<AethericChlamys>()
+            .DeactivateOnExit<AethericChlamys>();
 
         // targets of second bloodrake will be killed if they are targets of 'Cursed Casting' (which targets players with 'Role Call')
         Cast(id + 0x2000, (uint)AID.Bloodrake, 4.2f, 4, "Bloodrake 2")
-            .ActivateOnEnter<DirectorsBelone>();
+            .ActivateOnEnter<DirectorsBelone>()
+            .ActivateOnEnter<Bloodrake>()
+            .DeactivateOnExit<Bloodrake>()
+            .SetHint(StateMachine.StateHint.Raidwide);
 
         // this cast removes status 2799 'Aethersucker' from boss
         // right after it ends, instant cast 27111 applies 'Role Call' debuffs - corresponding component handles that
@@ -129,6 +139,8 @@ class P4S1States : StateMachineBuilder
         Cast(id, (uint)AID.Bloodrake, delay, 4, "Bloodrake 3")
             .ActivateOnEnter<ElementalBelone>()
             .DeactivateOnExit<SettingTheScene>()
+            .ActivateOnEnter<Bloodrake>()
+            .DeactivateOnExit<Bloodrake>()
             .SetHint(StateMachine.StateHint.Raidwide);
         Cast(id + 0x1000, (uint)AID.SettingTheScene, 7.3f, 4, "Scene")
             .ActivateOnEnter<SettingTheScene>()
@@ -137,6 +149,8 @@ class P4S1States : StateMachineBuilder
             .ActivateOnEnter<VengefulBelone>();
         Cast(id + 0x3000, (uint)AID.ElementalBelone, 4.2f, 4); // 'elemental resistance down' applied after cast end
         Cast(id + 0x4000, (uint)AID.Bloodrake, 4.2f, 4, "Bloodrake 4")
+            .ActivateOnEnter<Bloodrake>()
+            .DeactivateOnExit<Bloodrake>()
             .SetHint(StateMachine.StateHint.Raidwide);
         Cast(id + 0x5000, (uint)AID.BeloneBursts, 4.2f, 5, "Orbs") // orbs appear at cast start, tether and start moving at cast end
             .SetHint(StateMachine.StateHint.PositioningStart);
@@ -150,6 +164,8 @@ class P4S1States : StateMachineBuilder
     private void BeloneCoils(uint id, float delay)
     {
         Cast(id, (uint)AID.Bloodrake, delay, 4, "Bloodrake 5")
+            .ActivateOnEnter<Bloodrake>()
+            .DeactivateOnExit<Bloodrake>()
             .SetHint(StateMachine.StateHint.Raidwide);
         Cast(id + 0x1000, (uint)AID.BeloneCoils, 3.2f, 4, "Coils 1")
             .ActivateOnEnter<BeloneCoils>()
@@ -157,8 +173,12 @@ class P4S1States : StateMachineBuilder
             .SetHint(StateMachine.StateHint.PositioningStart);
         InversiveChlamys(id + 0x2000, 3.2f)
             .SetHint(StateMachine.StateHint.PositioningEnd);
-        Cast(id + 0x3000, (uint)AID.AethericChlamys, 2.4f, 4);
+        Cast(id + 0x3000, (uint)AID.AethericChlamys, 2.4f, 4)
+            .ActivateOnEnter<AethericChlamys>()
+            .DeactivateOnExit<AethericChlamys>();
         Cast(id + 0x4000, (uint)AID.Bloodrake, 4.2f, 4, "Bloodrake 6")
+            .ActivateOnEnter<Bloodrake>()
+            .DeactivateOnExit<Bloodrake>()
             .SetHint(StateMachine.StateHint.Raidwide);
         Cast(id + 0x5000, (uint)AID.BeloneCoils, 4.2f, 4, "Coils 2")
             .ActivateOnEnter<DirectorsBelone>()
